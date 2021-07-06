@@ -3,8 +3,13 @@ const path = require('path');
 const mongoose = require('mongoose');
 //One of many engines used to parse ejs
 const ejsMate = require('ejs-mate');
+//Destrucure as we are going to add more schemas to the file
+const {campgroundSchema} = require('./schemas.js');
+const catchAsync = require('./utils/catchAsync')
+const expressError = require('./utils/ExpressError')
 const methodOverride = require('method-override');
 const Campground = require('./models/campground');
+const ExpressError = require('./utils/ExpressError');
 
 //Connect to our DB, will create the yelp-camp DB for us
 mongoose.connect('mongodb://localhost:27017/yelp-camp', {
@@ -35,6 +40,19 @@ app.use(express.urlencoded({extended: true}));
 //Pass in query string we want to use for our overrides
 app.use(methodOverride('_method'));
 
+const validateCampground = (req, res, next) => {
+    //validate using the request body
+    const {error} = campgroundSchema.validate(req.body);
+    if (error){
+        //Map over the error.details to make a single string message
+        const msg = error.details.map(el => el.message).join(',')
+        //Pass the message to our Error class
+        throw new ExpressError(msg, 400);
+    } else {
+        next();
+    }
+}
+
 
 app.get('/', (req, res) => {
     res.render('home');
@@ -53,39 +71,52 @@ app.get('/campgrounds/new', (req, res) =>{
 })
 
 //Post route of Create CRUD
-app.post('/campgrounds', async(req, res) =>{
+app.post('/campgrounds', validateCampground, catchAsync(async(req, res, next) =>{
     const campground = new Campground(req.body.campground);
     await campground.save();
     res.redirect(`/campgrounds/${campground._id}`);
-})
-app.get('/campgrounds/:id', async(req, res) =>{
+}))
+
+app.get('/campgrounds/:id', catchAsync(async(req, res) =>{
     //Find the campground using its id
     const campground = await Campground.findById(req.params.id);
     res.render('campgrounds/show', {campground});
-})
+}))
 
 //Edit/Update functionality of CRUD
-app.get('/campgrounds/:id/edit', async(req, res)=>{
+app.get('/campgrounds/:id/edit', catchAsync(async(req, res)=>{
     //Find the campground using its id
     const campground = await Campground.findById(req.params.id);
     res.render('campgrounds/edit', {campground});
-})
+}))
 
 //Update Functionality of CRUD
-app.put('/campgrounds/:id', async(req, res) => {
+app.put('/campgrounds/:id', catchAsync(async(req, res) => {
     const {id} = req.params;
     //Pass in ID and spread the req.body object
     const campground = await Campground.findByIdAndUpdate(id, {...req.body.campground});
     res.redirect(`/campgrounds/${campground._id}`);
-})
+}))
 
 //Delete Route of CRUD
-app.delete('/campgrounds/:id', async(req, res)=>{
+app.delete('/campgrounds/:id', catchAsync(async(req, res)=>{
     const {id} = req.params;
     //We need to find the campground before we delete it
     //And remove all of its associated data before deleting it
     await Campground.findByIdAndDelete(id);
     res.redirect('/campgrounds');
+}))
+
+//This will only run if nothing else matched first and 
+//We didnt respond from any of them
+app.all('*', (req, res, next) => {
+    next(new ExpressError('Page Not Found', 404));
+})
+
+app.use((err, req, res, next) => {
+    const {statusCode = 500} = err;
+    if (!err.message) err.message = 'Oh no!, Something Went Wrong!'
+    res.status(statusCode).render('error', {err});
 })
 
 app.listen(3000, () => {
