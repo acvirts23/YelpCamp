@@ -5,6 +5,7 @@ const Review = require('./review');
 //So we make a variable to make it easier/shorter
 const Schema = mongoose.Schema;
 
+//Campground Model
 const CampgroundSchema = new Schema({
     title: String,
     image: String,
