@@ -5,10 +5,21 @@ const Review = require('./review');
 //So we make a variable to make it easier/shorter
 const Schema = mongoose.Schema;
 
+//Image Model
+const ImageSchema = new Schema({
+    url: String,
+    filename: String,
+})
+
+ImageSchema.virtual('thumbnail').get(function () {
+    return this.url.replace('/upload', '/upload/w_200');
+})
+
+
 //Campground Model
 const CampgroundSchema = new Schema({
     title: String,
-    image: String,
+    images: [ImageSchema],
     price: Number,
     description: String,
     location: String,

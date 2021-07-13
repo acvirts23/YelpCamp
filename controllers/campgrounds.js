@@ -1,6 +1,7 @@
 //Controller for campground
 
 const Campground = require('../models/campground');
+const { cloudinary } = require('../cloudinary');
 
 //Home page that shows all campgrounds
 module.exports.index = async (req, res) => {
@@ -19,8 +20,10 @@ module.exports.renderNewForm = (req, res) => {
 //Post route to make a new campground
 module.exports.createCampground = async (req, res, next) => {
     const campground = new Campground(req.body.campground);
+    campground.images = req.files.map(f => ({ url: f.path, filename: f.filename }));
     campground.author = req.user._id;
     await campground.save();
+    console.log(campground)
     req.flash('success', 'Successfully made a new campground!');
     res.redirect(`/campgrounds/${campground._id}`);
 }
@@ -57,6 +60,20 @@ module.exports.updateCampground = async (req, res) => {
     const { id } = req.params;
     //Pass in ID and spread the req.body object
     const campground = await Campground.findByIdAndUpdate(id, { ...req.body.campground });
+    //Makes us the array
+    const imgs = req.files.map(f => ({ url: f.path, filename: f.filename }));
+    //Spreading it says dont pass in the array, just take the data from the array and pass that in
+    campground.images.push(...imgs);
+    console.log(campground)
+    await campground.save();
+    //If the request body has images to be deleted
+    if (req.body.deleteImages) {
+        for (let filename of req.body.deleteImages) {
+            await cloudinary.uploader.destroy(filename);
+        }
+        //Pull from the images array, all images where the filenam is in the req.body.deleteImages array
+        await campground.updateOne({ $pull: { images: { filename: { $in: req.body.deleteImages } } } })
+    }
     req.flash('success', 'Successfully updated campground!')
     res.redirect(`/campgrounds/${campground._id}`);
 }
