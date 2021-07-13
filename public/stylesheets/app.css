@@ -12,3 +12,13 @@
     height: 100%;
     object-fit: cover;
 }
+
+#cluster-map{
+    width: 100%;
+    height: 350px;
+}
+
+#map{
+    width: 100%;
+    height: 300px;
+}
