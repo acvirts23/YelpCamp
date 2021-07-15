@@ -1,4 +1,3 @@
-
 if (process.env.NODE_ENV !== "production") {
     require('dotenv').config();
 }
@@ -14,15 +13,19 @@ const methodOverride = require('method-override');
 const ExpressError = require('./utils/ExpressError');
 const passport = require('passport');
 const LocalStrategy = require('passport-local');
+const mongoSanitize = require('express-mongo-sanitize');
 const User = require('./models/user');
+//const helmet = require('helmet');
+const MongoStore = require('connect-mongo');
 
 //Require our campground routes
 const userRoutes = require('./routes/users');
 const campgroundRoutes = require('./routes/campgrounds');
 const reviewRoutes = require('./routes/reviews');
+const dbUrl = process.env.DB_URL || 'mongodb://localhost:27017/yelp-camp';
 
 //Connect to our DB, will create the yelp-camp DB for us
-mongoose.connect('mongodb://localhost:27017/yelp-camp', {
+mongoose.connect(dbUrl, {
     useNewUrlParser: true,
     useCreateIndex: true,
     useUnifiedTopology: true,
@@ -52,22 +55,40 @@ app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride('_method'));
 //Tells express to serve our public assets from our 'public' folder
 app.use(express.static(path.join(__dirname, 'public')))
+//Sanitize Mongo Queries to prevent Mongo Injections
+app.use(mongoSanitize());
+
+const secret = process.env.SECRET || 'thisshouldbeabettersecret!';
+
+const store = MongoStore.create({
+    mongoUrl: dbUrl,
+    secret: secret,
+    touchAfter: 24 * 60 * 60,
+
+})
 
 //Sessions!
 const sessionConfig = {
-    secret: 'thisshouldbeabettersecret!',
+    store: store,
+    name: 'session',
+    secret: secret,
     resave: false,
     saveUninitialized: true,
     cookie: {
         httpOnly: true,
+        //secure: true,
         expires: Date.now() + 1000 * 60 * 60 * 24 * 7,
         maxAge: 1000 * 60 * 60 * 24 * 7
     }
-    //store: Going to be a Mongo store eventually
 }
+
+store.on("error", function(e){
+    console.log("SESSION STORE ERROR", e);
+})
 
 app.use(session(sessionConfig));
 app.use(flash());
+//app.use(helmet())
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -80,7 +101,7 @@ passport.serializeUser(User.serializeUser())
 passport.deserializeUser(User.deserializeUser())
 
 app.use((req, res, next) => {
-    console.log(req.session)
+    console.log(req.session);
     res.locals.currentUser = req.user;
     //Most of the time there will be nothing in req.flash
     res.locals.success = req.flash('success');
@@ -88,8 +109,9 @@ app.use((req, res, next) => {
     next();
 })
 
+//Login&Register Routes
 app.use('/', userRoutes);
-//Preface all campgrounds routes with '/campgrounds'
+//Preface all campground routes with '/campgrounds'
 app.use('/campgrounds', campgroundRoutes);
 //Preface all review routes with '/campgrounds/:id/reviews'
 app.use('/campgrounds/:id/reviews', reviewRoutes);
@@ -110,6 +132,7 @@ app.use((err, req, res, next) => {
     res.status(statusCode).render('error', { err });
 })
 
-app.listen(3000, () => {
-    console.log('Serving on port 3000');
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+    console.log(`Serving on port ${port}`);
 })
